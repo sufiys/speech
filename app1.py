@@ -2,6 +2,9 @@ import streamlit as st
 import whisper
 import jiwer
 import os
+import numpy as np
+import av
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
 from io import BytesIO
 import soundfile as sf
 
@@ -11,7 +14,10 @@ st.set_page_config(page_title="Student Reading Analysis", layout="wide")
 st.title("📖 Student Reading Analysis App")
 st.write("Upload or record a reading and provide the reference text. The app will analyze the reading and generate a detailed scorecard.")
 
-# Select Input Method
+# 📜 Enter Reference Text
+reference_text = st.text_area("📜 Enter the reference text:")
+
+# 🎙️ Choose Input Method
 option = st.radio("Choose input method:", ["Upload Audio", "Record Audio"])
 
 audio_data = None
@@ -22,55 +28,41 @@ if option == "Upload Audio":
     if uploaded_file:
         audio_data = uploaded_file.read()
 
-# 🎙️ **Option 2: Record Audio Using JavaScript**
+# 🎙️ **Option 2: Record Audio with streamlit-webrtc**
 elif option == "Record Audio":
-    st.write("Click the button below to record:")
+    st.write("🎙️ Click 'Start' to begin recording and 'Stop' when done.")
 
-    # JavaScript for recording audio
-    audio_recorder_html = """
-    <script>
-    let mediaRecorder;
-    let audioChunks = [];
+    # WebRTC audio recording
+    webrtc_ctx = webrtc_streamer(
+        key="speech-recording",
+        mode=WebRtcMode.SENDRECV,
+        client_settings=ClientSettings(
+            rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
+            media_stream_constraints={"video": False, "audio": True},
+        ),
+    )
 
-    function startRecording() {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                mediaRecorder = new MediaRecorder(stream);
-                mediaRecorder.ondataavailable = event => {
-                    audioChunks.push(event.data);
-                };
-                mediaRecorder.onstop = () => {
-                    let audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                    let reader = new FileReader();
-                    reader.readAsDataURL(audioBlob);
-                    reader.onloadend = () => {
-                        let base64Audio = reader.result.split(',')[1];
-                        fetch('/upload_audio', { method: 'POST', body: JSON.stringify({ audio: base64Audio }) });
-                    };
-                };
-                mediaRecorder.start();
-            });
-    }
+    # Process recorded audio
+    if webrtc_ctx.audio_receiver:
+        st.success("Recording Complete! Processing audio...")
+        audio_frames = webrtc_ctx.audio_receiver.get_frames(timeout=1)
 
-    function stopRecording() {
-        mediaRecorder.stop();
-    }
-    </script>
+        # Convert to WAV
+        audio_samples = np.concatenate([np.frombuffer(frame.to_ndarray(), dtype=np.int16) for frame in audio_frames])
+        sample_rate = 48000  # WebRTC default sample rate
 
-    <button onclick="startRecording()">Start Recording</button>
-    <button onclick="stopRecording()">Stop Recording</button>
-    """
+        # Save to file
+        temp_audio_path = "temp_audio.wav"
+        sf.write(temp_audio_path, audio_samples, sample_rate)
+        audio_data = temp_audio_path
 
-    st.components.v1.html(audio_recorder_html, height=100)
-
-# 📜 Enter Reference Text
-reference_text = st.text_area("📜 Enter the reference text:")
-
+# Process the audio if available
 if audio_data and reference_text.strip():
-    # Save uploaded/recorded file
-    temp_audio_path = "temp_audio.wav"
-    with open(temp_audio_path, "wb") as f:
-        f.write(audio_data)
+    # Save uploaded file
+    if option == "Upload Audio":
+        temp_audio_path = "temp_audio.wav"
+        with open(temp_audio_path, "wb") as f:
+            f.write(audio_data)
 
     # Load Whisper Model
     with st.spinner("Transcribing audio..."):
@@ -87,7 +79,6 @@ if audio_data and reference_text.strip():
     # Compute errors
     error_analysis = jiwer.compute_measures(reference_text, transcription)
 
-    # ✅ Accessing errors correctly
     omissions = error_analysis["deletions"]
     insertions = error_analysis["insertions"]
     substitutions = error_analysis["substitutions"]
@@ -97,7 +88,7 @@ if audio_data and reference_text.strip():
     total_errors = omissions + insertions + substitutions
     accuracy = max(0, round(((total_words - total_errors) / total_words) * 100, 2))
 
-    # Scorecard Table
+    # 📊 Scorecard
     st.subheader("📊 Scorecard")
     scorecard = {
         "Errors": total_errors,
