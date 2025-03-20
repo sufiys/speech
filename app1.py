@@ -4,7 +4,6 @@ import jiwer
 import os
 from io import BytesIO
 import soundfile as sf
-from streamlit_audio_recorder import st_audio_recorder
 
 # Set Streamlit Page Config
 st.set_page_config(page_title="Student Reading Analysis", layout="wide")
@@ -15,7 +14,6 @@ st.write("Upload or record a reading and provide the reference text. The app wil
 # Select Input Method
 option = st.radio("Choose input method:", ["Upload Audio", "Record Audio"])
 
-# Initialize variables
 audio_data = None
 
 # 📤 **Option 1: Upload an Audio File**
@@ -24,12 +22,46 @@ if option == "Upload Audio":
     if uploaded_file:
         audio_data = uploaded_file.read()
 
-# 🎙️ **Option 2: Record Audio**
+# 🎙️ **Option 2: Record Audio Using JavaScript**
 elif option == "Record Audio":
     st.write("Click the button below to record:")
-    audio_bytes = st_audio_recorder(pause_allowed=True)
-    if audio_bytes:
-        audio_data = audio_bytes
+
+    # JavaScript for recording audio
+    audio_recorder_html = """
+    <script>
+    let mediaRecorder;
+    let audioChunks = [];
+
+    function startRecording() {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                mediaRecorder = new MediaRecorder(stream);
+                mediaRecorder.ondataavailable = event => {
+                    audioChunks.push(event.data);
+                };
+                mediaRecorder.onstop = () => {
+                    let audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                    let reader = new FileReader();
+                    reader.readAsDataURL(audioBlob);
+                    reader.onloadend = () => {
+                        let base64Audio = reader.result.split(',')[1];
+                        fetch('/upload_audio', { method: 'POST', body: JSON.stringify({ audio: base64Audio }) });
+                    };
+                };
+                mediaRecorder.start();
+            });
+    }
+
+    function stopRecording() {
+        mediaRecorder.stop();
+    }
+    </script>
+
+    <button onclick="startRecording()">Start Recording</button>
+    <button onclick="stopRecording()">Stop Recording</button>
+    """
+
+    st.components.v1.html(audio_recorder_html, height=100)
 
 # 📜 Enter Reference Text
 reference_text = st.text_area("📜 Enter the reference text:")
