@@ -1,6 +1,7 @@
 streamlit
-openai-whisper
-torch
-soundfile
+whisper
 jiwer
-ffmpeg-python
+soundfile
+streamlit-webrtc
+numpy
+av
