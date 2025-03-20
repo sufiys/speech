@@ -1,50 +1,73 @@
 import streamlit as st
 import whisper
-import soundfile as sf
-import tempfile
-from jiwer import wer, cer, process_words
+import jiwer
+import os
 
-# Load Whisper model
-model = whisper.load_model("base")
+# Set Streamlit Page Config
+st.set_page_config(page_title="Student Reading Analysis", layout="wide")
 
-st.title("Student Reading Analysis System")
+st.title("📖 Student Reading Analysis App")
+st.write("Upload a recording of a student reading and provide the reference text. The app will analyze the reading and generate a detailed scorecard.")
 
-# File uploader for audio
-audio_file = st.file_uploader("Upload Student's Reading (MP3/WAV)", type=["mp3", "wav"])
+# Upload audio file
+uploaded_file = st.file_uploader("🎤 Upload a reading audio file", type=["mp3", "wav"])
 
-# Text area for reference passage
-reference_text = st.text_area("Enter the text the student is reading")
+# Input reference text
+reference_text = st.text_area("📜 Enter the reference text:")
 
-if audio_file and reference_text:
-    # Save audio temporarily
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
-        temp_audio.write(audio_file.read())
-        temp_audio_path = temp_audio.name
+if uploaded_file and reference_text.strip():
+    # Save uploaded file temporarily
+    temp_audio_path = "temp_audio.mp3"
+    with open(temp_audio_path, "wb") as f:
+        f.write(uploaded_file.read())
 
-    # Transcribe audio
-    result = model.transcribe(temp_audio_path)
-    transcribed_text = result["text"]
-
-    # Compute errors
-    error_analysis = process_words(reference_text, transcribed_text)
-    omissions = len(error_analysis["deletions"])
-    insertions = len(error_analysis["insertions"])
-    substitutions = len(error_analysis["substitutions"])
-    total_words = len(reference_text.split())
+    # Load Whisper Model
+    with st.spinner("Transcribing audio..."):
+        model = whisper.load_model("base")
+        result = model.transcribe(temp_audio_path)
+        transcription = result["text"]
     
-    accuracy = max(0, 100 - (wer(reference_text, transcribed_text) * 100))
-    wpm = len(transcribed_text.split()) / (result["segments"][-1]["end"] / 60)  # Words per minute
+    st.subheader("📝 Transcription")
+    st.write(transcription)
 
-    # Display results
-    st.subheader("Scorecard")
-    st.write(f"**Errors:** {omissions + insertions + substitutions}")
-    st.write(f"**Omissions:** {omissions}")
-    st.write(f"**Insertions:** {insertions}")
-    st.write(f"**Mispronunciations/Substitutions:** {substitutions}")
-    st.write(f"**Total Words Read:** {len(transcribed_text.split())}")
-    st.write(f"**WPM (Words Per Minute):** {wpm:.2f}")
-    st.write(f"**Accuracy:** {accuracy:.2f}%")
+    # Compute Word Error Rate (WER)
+    wer_processor = jiwer.Compose([
+        jiwer.ToLowerCase(),
+        jiwer.RemovePunctuation(),
+        jiwer.RemoveWhiteSpace(replace_by_space=True),
+        jiwer.ReduceToListOfWords(),
+        jiwer.Wer()
+    ])
+    
+    error_analysis = jiwer.process_words(reference_text, transcription)
 
-    # Display transcribed text
-    st.subheader("Transcribed Text")
-    st.text(transcribed_text)
+    # Debugging: Print error_analysis
+    st.subheader("🔍 Error Analysis Debug Info")
+    st.json(error_analysis)
+
+    # Ensure keys exist before accessing them
+    omissions = len(error_analysis.get("deletions", []))
+    insertions = len(error_analysis.get("insertions", []))
+    substitutions = len(error_analysis.get("substitutions", []))
+
+    # Calculate additional metrics
+    total_words = len(reference_text.split())
+    total_errors = omissions + insertions + substitutions
+    accuracy = max(0, round(((total_words - total_errors) / total_words) * 100, 2))
+    
+    # Scorecard Table
+    st.subheader("📊 Scorecard")
+    scorecard = {
+        "Errors": total_errors,
+        "Omissions": omissions,
+        "Insertions": insertions,
+        "Substitutions": substitutions,
+        "Scored Word Count": total_words,
+        "Accuracy": f"{accuracy}%",
+    }
+    st.table(scorecard)
+
+    # Cleanup temp file
+    os.remove(temp_audio_path)
+else:
+    st.warning("Please upload an audio file and enter reference text to proceed.")
