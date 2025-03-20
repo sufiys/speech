@@ -30,15 +30,10 @@ if uploaded_file and reference_text.strip():
     st.subheader("📝 Transcription")
     st.write(transcription)
 
-    # Compute Word Error Rate (WER) - Fixed Version
-    wer_processor = jiwer.Compose([
-        jiwer.ToLowerCase(),
-        jiwer.RemovePunctuation(),
-        jiwer.RemoveWhiteSpace(replace_by_space=True),
-        jiwer.RemoveMultipleSpaces(),  # FIX: Remove invalid `ReduceToListOfWords()`
-        jiwer.Wer()
-    ])
-    
+    # Compute Word Error Rate (WER)
+    wer = jiwer.wer(reference_text, transcription)  # ✅ FIXED WER Calculation
+
+    # Compute other errors (insertions, deletions, substitutions)
     error_analysis = jiwer.process_words(reference_text, transcription)
 
     # Debugging: Print error_analysis
@@ -64,6 +59,7 @@ if uploaded_file and reference_text.strip():
         "Substitutions": substitutions,
         "Scored Word Count": total_words,
         "Accuracy": f"{accuracy}%",
+        "WER": round(wer, 4)  # ✅ Correctly computed WER
     }
     st.table(scorecard)
 
