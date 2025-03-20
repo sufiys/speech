@@ -30,12 +30,12 @@ if uploaded_file and reference_text.strip():
     st.subheader("📝 Transcription")
     st.write(transcription)
 
-    # Compute Word Error Rate (WER)
+    # Compute Word Error Rate (WER) - Fixed Version
     wer_processor = jiwer.Compose([
         jiwer.ToLowerCase(),
         jiwer.RemovePunctuation(),
         jiwer.RemoveWhiteSpace(replace_by_space=True),
-        jiwer.ReduceToListOfWords(),
+        jiwer.RemoveMultipleSpaces(),  # FIX: Remove invalid `ReduceToListOfWords()`
         jiwer.Wer()
     ])
     
