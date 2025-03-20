@@ -5,3 +5,6 @@ soundfile
 streamlit-webrtc
 numpy
 av
+numba==0.56.4
+torch
+torchaudio
