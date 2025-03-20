@@ -31,19 +31,15 @@ if uploaded_file and reference_text.strip():
     st.write(transcription)
 
     # Compute Word Error Rate (WER)
-    wer = jiwer.wer(reference_text, transcription)  # ✅ FIXED WER Calculation
+    wer = jiwer.wer(reference_text, transcription)
 
-    # Compute other errors (insertions, deletions, substitutions)
-    error_analysis = jiwer.process_words(reference_text, transcription)
+    # Compute errors
+    error_analysis = jiwer.compute_measures(reference_text, transcription)
 
-    # Debugging: Print error_analysis
-    st.subheader("🔍 Error Analysis Debug Info")
-    st.json(error_analysis)
-
-    # Ensure keys exist before accessing them
-    omissions = len(error_analysis.get("deletions", []))
-    insertions = len(error_analysis.get("insertions", []))
-    substitutions = len(error_analysis.get("substitutions", []))
+    # ✅ Correctly access error metrics
+    omissions = error_analysis["deletions"]
+    insertions = error_analysis["insertions"]
+    substitutions = error_analysis["substitutions"]
 
     # Calculate additional metrics
     total_words = len(reference_text.split())
@@ -59,7 +55,7 @@ if uploaded_file and reference_text.strip():
         "Substitutions": substitutions,
         "Scored Word Count": total_words,
         "Accuracy": f"{accuracy}%",
-        "WER": round(wer, 4)  # ✅ Correctly computed WER
+        "WER": round(wer, 4)
     }
     st.table(scorecard)
 
