@@ -6,5 +6,5 @@ streamlit-webrtc
 numpy
 av
 numba==0.56.4
-torch
-torchaudio
+torch==1.13.1
+torchaudio==0.13.1
